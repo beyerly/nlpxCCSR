@@ -10,5 +10,9 @@ WolframAplha API for queries. The class will generate basic verbal responses, or
 it interprets the sentence as a specific robot-command like 'pick up the ball'. THe CCSR platform will synthesize the
 text-based ccsrNlpClass responses back into speech using espeak.
 
-By running the dubug script nlpcmd.py, you get a cmd-line interface, and we can interact with the engine by typing questions 
-or comamnds.
+By running the dubug script nlpcmd.py, you get a cmd-line interface, and you can interact with the engine by typing questions 
+or commands.
+
+>> python nlpcmd.py
+
+nlpxCCSR requires the pattern.en package, and a wolframAplha app ID.
