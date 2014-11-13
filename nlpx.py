@@ -48,8 +48,8 @@ class ccsrNlpClass:
       # as a result of a query.
       self.wolframAlphaPodsUsed = ('Notable facts', 'Result')
 
-      self.fifo = open('/home/root/ccsr/nlp_fifo_in', 'w')
-      self.wolframID = ''
+#      self.fifo = open('/home/root/ccsr/nlp_fifo_in', 'w')
+      self.wolframID = ''  # Need to fill in your Wolfram App ID
       
    # If nlpx can;t determine the answer to a question based on its own knowledge
    # this function synthesises a wolframAlpha query from the sentence
@@ -90,7 +90,7 @@ class ccsrNlpClass:
 
    # Respone to voice input back to CCSR process as telemetry through nlp fifo
    def response(self, s):
-      self.fifo.write(s + '#')
+#      self.fifo.write(s + '#')
       print s
 
    # Main function: generate a CCSR command as response to input text.
