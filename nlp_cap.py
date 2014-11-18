@@ -18,7 +18,7 @@ from pattern.en import conjugate, lemma, lexeme
 class capabilitiesClass:
    def __init__(self):
       # List of verbs that are translated into CCSR robot commands
-      self.c = ('turn', 'find', 'scan', 'extend', 'pick', 'put')
+      self.c = ('turn', 'find', 'scan', 'extend', 'pick', 'put', 'look')
 
 
    # Return True if verb is in CCSR capabilities list
@@ -34,5 +34,7 @@ class capabilitiesClass:
           return 'pickup'
       elif sa.getSentenceHead('VP') == 'put':
           return 'putdown'
+      elif sa.getSentenceHead('VP') == 'look':
+          return 'orient fwd'
       else:
          return "say I don't know that command"

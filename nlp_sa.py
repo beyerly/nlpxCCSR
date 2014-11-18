@@ -16,8 +16,13 @@ from pattern.en import conjugate, lemma, lexeme
 
 # Sentence Salysis Class. This is instantiated with a pattern.en sentence class
 class sentenceAnalysisClass:
-   def __init__(self, s):
+   def __init__(self, s, debug=0):
       self.s = s    # pattern.en sentence class
+      self.concept = ''
+      self.subject = ''
+      self.conceptPhrase = ''
+      self.debug = False
+      
       # Dictionary of chunk sequence reqexps related to a specific sentence type
       self.chunkSequences = [[re.compile(':VP(:ADVP|:PP)'), 'command'],     # e.g. turn 180 degrees
                              [re.compile(':NP:VP:(ADJP|NP)'), 'statement'], # X is Y
@@ -31,10 +36,11 @@ class sentenceAnalysisClass:
                       'greetings':('hello', 'hi', 'greetings')                                      # words that constitute a greeting
                       }
       self.reflex = {'I':'you', 'you':'I', 'yourself':'I'}
-# for debug 
-#      print self.s
-#      for chunk in self.s.chunks:
-#         print chunk.type, chunk.role, chunk.head, [(w.string, w.type) for w in chunk.words]
+      if debug: 
+         print self.s
+         self.debug = True
+         for chunk in self.s.chunks:
+            print chunk.type, chunk.role, chunk.head, [(w.string, w.type) for w in chunk.words]
 
    # Create a ':' separated string from the sequential listo of chunks in the analysed sentence.
    # This string is used for regular expression matching later
@@ -50,6 +56,15 @@ class sentenceAnalysisClass:
       for chunk in self.s.chunks:
          if chunk.type == t:
             return chunk
+      return None
+
+   def getNthChunk(self, t, n):
+      x = 0
+      for chunk in self.s.chunks:
+         if chunk.type == t:
+            if x == n:
+               return chunk
+            x = x + 1 
       return None
    
    # Return the chunk sequence type of the analysed sentence
@@ -72,33 +87,53 @@ class sentenceAnalysisClass:
              if (self.s.chunks[0].type == 'VP'):
                 # First chunk is verb-phrase
                 if (self.s.chunks[0].head.lemma in self.wordRef['stateVerbs']):
+                   self.concept = self.getSentenceRole('OBJ')
                    return 'confirmState'              # is X Y?
                 if (self.s.chunks[0].head.lemma in self.wordRef['commandVerbs']):
                    return 'command'                   # can you X Y
+                if (self.s.chunks[0].head.lemma == 'do'):
+                   if self.getSentenceRole('OBJ') == 'I':
+                      if self.getNthChunk('VP',1).head.lemma == 'know':
+                         self.concept = self.getSentenceRole('SBJ')
+                         self.conceptPhrase = self.getSentencePhrase('SBJ')
+                         print self.concept
+                         print self.conceptPhrase
+                         return self.sentenceType_WH()
              else:
                 # use regexp-based chunk matching to find sentence type
+                self.subject = self.getSentenceRole('SBJ')
+                self.concept = self.getSentenceRole('OBJ')
+                self.conceptPhrase = self.getSentencePhrase('OBJ')
                 return self.matchChunk()
           else:
              # Sentence starts with an un-chunked word: 'what, where, how, etc'
-             w = self.getFirstWord('WRB')
-             if (w != None):
-                if (w.string == 'where'):
-                   return 'questionLocality'          # where is X
-                elif (w.string == 'how'):
-                   return 'questionState'             # how is X
-             w = self.getFirstWord('WP')
-             if (w != None):
-                if (w.string == 'what' or w.string == 'who'):              # what/who is X
-                   return 'questionDefinition'
-                if (w.string == 'who'):               # who is X
-                   return 'questionProperNoun'
-             return None
+             self.concept = self.getSentenceRole('OBJ')
+             self.conceptPhrase = self.getSentencePhrase('OBJ')
+             return self.sentenceType_WH()
       else:
           # no chunks: e.g. interjections: hello, wow, etc
           w = self.getFirstWord('UH')
           if (w != None):
               if w.string in self.wordRef['greetings']:
                   return 'greeting'
+
+   # Return sentence type for WH-words: 'what, where, how, etc'
+   def sentenceType_WH(self):
+       w = self.getFirstWord('WRB')
+       if (w != None):
+          if (w.string == 'where'):
+             print self.concept
+             print self.conceptPhrase
+             return 'questionLocality'          # where is X
+          elif (w.string == 'how'):
+             return 'questionState'             # how is X
+       w = self.getFirstWord('WP')
+       if (w != None):
+          if (w.string == 'what' or w.string == 'who'):              # what/who is X
+             return 'questionDefinition'
+          if (w.string == 'who'):               # who is X
+             return 'questionProperNoun'
+       return None
                 
    # Return first word in the sentence of type 'type', return None if non-existent
    def getFirstWord(self, type):
@@ -173,7 +208,7 @@ class sentenceAnalysisClass:
       else:
          return obj  
 
-   # called when sentenct is a query, ruturns True if query is too complex to CCSR to resolve wih tits own concept memory,
+   # called when sentence is a query, ruturns True if query is too complex to CCSR to resolve wih tits own concept memory,
    # and nlp should pass on query to cloud
    def complexQuery(self):
        # Currentl definition of a 'complex' query is
@@ -181,4 +216,5 @@ class sentenceAnalysisClass:
        #   - first NP chunk has more than 2 words
        # e.g. 'where is the cat' => simple
        # e.g. 'where is the largest cat in the workd' => complex
+       print 's' + self.conceptPhrase
        return len(self.getFirstChunk('NP').words) > 2 or (len(self.s.chunks)>2)

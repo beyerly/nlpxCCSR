@@ -34,7 +34,7 @@ from nlp_mem import memoryClass
 # main CCSR NLP Class
 class ccsrNlpClass:
 
-   def __init__(self):
+   def __init__(self, useFifos, appID):
       self.cap       = capabilitiesClass()   # CCSR capabilities
       self.ccsrmem   = memoryClass()         # memory of concepts
 
@@ -48,8 +48,12 @@ class ccsrNlpClass:
       # as a result of a query.
       self.wolframAlphaPodsUsed = ('Notable facts', 'Result')
 
-#      self.fifo = open('/home/root/ccsr/nlp_fifo_in', 'w')
-      self.wolframID = ''  # Need to fill in your Wolfram App ID
+      if useFifos:
+         self.wfifo = open('/home/root/ccsr/nlp_fifo_in', 'w')
+         self.rfifo = open('/home/root/ccsr/nlp_fifo_out', 'r')
+
+      self.wolframID = appID
+      self.useFifos = useFifos
       
    # If nlpx can;t determine the answer to a question based on its own knowledge
    # this function synthesises a wolframAlpha query from the sentence
@@ -71,46 +75,64 @@ class ccsrNlpClass:
       call = 'curl "http://api.wolframalpha.com/v2/query?input=' + self.createWolframAlphaQuery(sa) + '&appid=' + self.wolframID + '&format=plaintext" -o query.xml'
       p = subprocess.Popen(call, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
       retval = p.wait()
-      # parse query XML file returned by wolfram alpha
-      tree = ET.parse('./query.xml')
-      root = tree.getroot()
-      for pod in root.findall('pod'):
-         title = pod.get('title')
-         if title in self.wolframAlphaPodsUsed:
-            # pod title os one that most likely yields good answers
-            for subpod in pod.findall('subpod'):
-               # retrieve plaintext answers
-               plaintext = subpod.find('plaintext')
-               if plaintext != None:
-                  text = subpod.find('plaintext').text
-                  textlist = re.split('\n', text)
-                  # return list of strings representign answer to query
-                  return textlist
-      return None
+      if retval == 0:
+         # parse query XML file returned by wolfram alpha
+         tree = ET.parse('./query.xml')
+         root = tree.getroot()
+         for pod in root.findall('pod'):
+            title = pod.get('title')
+            if title in self.wolframAlphaPodsUsed:
+               # pod title is one that most likely yields good answers
+               for subpod in pod.findall('subpod'):
+                  # retrieve plaintext answers
+                  plaintext = subpod.find('plaintext')
+                  if plaintext != None:
+                     text = subpod.find('plaintext').text
+                     textlist = re.split('\n', text)
+                     # return list of strings representign answer to query
+                     return textlist
+         # We havent found a known pod, just pick the second pod, a wild
+         # guess that is the most useful
+         pod = root.findall('pod')[1]
+         for subpod in pod.findall('subpod'):
+            # retrieve plaintext answers
+            plaintext = subpod.find('plaintext')
+            if plaintext != None:
+               text = subpod.find('plaintext').text
+               textlist = re.split('\n', text)
+               # return list of strings representign answer to query
+               return textlist
+      else:
+         print 'Error: curl command failed, only runs on linux. Query not successful'
+         return ('none')
 
    # Respone to voice input back to CCSR process as telemetry through nlp fifo
    def response(self, s):
-#      self.fifo.write(s + '#')
+      m = s + '*'
       print s
+      if self.useFifos:
+         self.wfifo.write(m)
+         self.wfifo.flush()
 
    # Main function: generate a CCSR command as response to input text.
    # Text will be from google speech2text service.
    # 'how are you' => 'say I am great'
    # 'can you look left => 'say sure', 'set pantilt 180 0 20'
-   def nlpParse(self, line):
+   def nlpParse(self, line, debug=0):
       text = parsetree(line, relations=True, lemmata=True)
       for sentence in text:
-         sa = sentenceAnalysisClass(sentence)
+         sa = sentenceAnalysisClass(sentence, debug)
          st = sa.sentenceType()
+         if sa.debug:
+            print st
          # Question state: 'how is X'
          if st == 'questionState':
-            concept = sa.getSentenceRole('OBJ')
-            if self.ccsrmem.known(concept):
+            if self.ccsrmem.known(sa.concept):
                # if we know anything about the concept, we rely on CCSR memory
-               if self.ccsrmem.concepts[concept].state == 'none':
-                  self.response("say Sorry, I don't know how " + sa.getSentencePhrase('OBJ') + ' ' + conjugate('be', self.ccsrmem.concepts[concept].person))
+               if self.ccsrmem.concepts[sa.concept].state == 'none':
+                  self.response("say Sorry, I don't know how " + sa.conceptPhrase + ' ' + conjugate('be', self.ccsrmem.concepts[sa.concept].person))
                else:   
-                  self.response("say " + sa.getSentencePhrase('OBJ') + " " + conjugate('be', self.ccsrmem.concepts[concept].person) + " " + self.ccsrmem.concepts[concept].state)
+                  self.response("say " + sa.conceptPhrase + " " + conjugate('be', self.ccsrmem.concepts[sa.concept].person) + " " + self.ccsrmem.concepts[sa.concept].state)
             else:
                if sa.complexQuery():
                   # Nothing is knows about the concept, and the query is 'complex', let's ask the cloud
@@ -118,26 +140,24 @@ class ccsrNlpClass:
                   for result in self.wolframAlphaAPI(sa):
                      self.response("say " + result)              
                else:
-                  self.response("say Sorry, I don't know " + sa.getSentencePhrase('OBJ'))
+                  self.response("say Sorry, I don't know " + sa.conceptPhrase)
          # Confirm state: 'is X Y'
          elif st == 'confirmState':
-            concept = sa.getSentenceRole('OBJ')
-            if self.ccsrmem.known(concept):
-               if sa.getSentencePhrase('ADJP') == self.ccsrmem.concepts[concept].state:
+            if self.ccsrmem.known(sa.concept):
+               if sa.getSentencePhrase('ADJP') == self.ccsrmem.concepts[sa.concept].state:
                   self.response("say yes") 
                else:
-                  self.response("say no, " + sa.getSentencePhrase('OBJ') + " " + conjugate('be', self.ccsrmem.concepts[concept].person) + " " + self.ccsrmem.concepts[concept].state)
+                  self.response("say no, " + sa.conceptPhrase('OBJ') + " " + conjugate('be', self.ccsrmem.concepts[sa.concept].person) + " " + self.ccsrmem.concepts[sa.concept].state)
             else:
-               self.response("say Sorry, I don't know " + sa.getSentencePhrase('OBJ'))
+               self.response("say Sorry, I don't know " + sa.conceptPhrase)
          # Question definition: 'what/who is X'
          elif st == 'questionDefinition':
-            concept = sa.getSentenceRole('OBJ')
             if sa.is2ndPersonalPronounPosessive('OBJ'): 
                # Question refers back to ccsr: what is 'your' X  
-               if concept in self.ccsrmem.concepts['I'].properties:
-                  self.response("say my " + sa.getSentenceRole('OBJ') + " is " + self.ccsrmem.concepts['I'].properties[concept])
+               if sa.concept in self.ccsrmem.concepts['I'].properties:
+                  self.response("say my " + sa.concept + " is " + self.ccsrmem.concepts['I'].properties[sa.concept])
                else:
-                  self.response("say I don't know what my " + sa.getSentenceRole('OBJ') + " is ")
+                  self.response("say I don't know what my " + sa.concept + " is ")
             else:
                # Question about person, object or thing
                if sa.complexQuery():
@@ -145,7 +165,7 @@ class ccsrNlpClass:
                   for result in self.wolframAlphaAPI(sa):
                      self.response("say " + result)              
                else:
-                  wordnetQuery = wordnet.synsets(concept)
+                  wordnetQuery = wordnet.synsets(sa.concept)
                   if len(wordnetQuery) > 0:
                      self.response("say " + re.split(";",wordnetQuery[0].gloss)[0])
                   else:
@@ -155,33 +175,30 @@ class ccsrNlpClass:
                         self.response("say " + result)              
          # State: 'X is Y'
          elif st == 'statement':
-            concept = sa.getSentenceRole('SBJ')
             if sa.is2ndPersonalPronounPosessive('SBJ'): 
                # Refers back to ccsr: 'your' X is Y 
-               if concept not in self.ccsrmem.concepts['I'].properties:
-                  self.ccsrmem.concepts['I'].properties[concept] = sa.getSentencePhrase('OBJ')
+               if sa.subject not in self.ccsrmem.concepts['I'].properties:
+                  self.ccsrmem.concepts['I'].properties[sa.subject] = sa.conceptPhrase
             else:
-               if not self.ccsrmem.known(concept):
-                  self.ccsrmem.add(concept)  
-               self.ccsrmem.concepts[concept].state = sa.getSentencePhrase('ADJP')
+               if not self.ccsrmem.known(sa.subject):
+                  self.ccsrmem.add(sa.subject)  
+               self.ccsrmem.concepts[sa.subject].state = sa.getSentencePhrase('ADJP')
             self.response("say I see") 
          # State locality: 'X is in Y'
          elif st == 'stateLocality':
-            concept = sa.getSentenceRole('SBJ')
-            if not self.ccsrmem.known(concept):
-               self.ccsrmem.add(concept)  
-            self.ccsrmem.concepts[concept].locality = sa.getSentencePhrase('PNP')
+            if not self.ccsrmem.known(sa.subject):
+               self.ccsrmem.add(sa.subject)  
+            self.ccsrmem.concepts[sa.subject].locality = sa.getSentencePhrase('PNP')
             self.response("say I see") 
          # Question locality: 'Where is X'
          elif st == 'questionLocality':
-            concept = sa.getSentenceRole('OBJ')
-            if self.ccsrmem.known(concept):
-               if self.ccsrmem.concepts[concept].locality == 'none':
-                  self.response("say Sorry, I don't know where " + sa.getSentencePhrase('OBJ') + ' ' + conjugate('be', self.ccsrmem.concepts[concept].person))
+            if self.ccsrmem.known(sa.concept):
+               if self.ccsrmem.concepts[sa.concept].locality == 'none':
+                  self.response("say Sorry, I don't know where " + sa.conceptPhrase('OBJ') + ' ' + conjugate('be', self.ccsrmem.concepts[sa.concept].person))
                else:   
-                  self.response(sa.getSentencePhrase('OBJ') + " " + conjugate('be', self.ccsrmem.concepts[concept].person) + " " + self.ccsrmem.concepts[concept].locality)
+                  self.response("say " + sa.conceptPhrase + " " + conjugate('be', self.ccsrmem.concepts[sa.concept].person) + " " + self.ccsrmem.concepts[sa.concept].locality)
             else:
-               self.response("say Sorry, I don't know " + sa.getSentencePhrase('OBJ'))
+               self.response("say Sorry, I don't know " + sa.conceptPhrase)
          # Command
          elif st == 'command':
             if self.cap.capable(sa.getSentenceHead('VP')):
@@ -203,7 +220,7 @@ class ccsrNlpClass:
                      self.response("say let me look that up for you")
                      self.response("say " + self.wolframAlphaAPI(sa))              
             else:
-               self.response("say sorry, I don't know how to " + sa.getSentenceHead('VP'))
+               self.response("say I'm afraid I can't do that. I don't know how to " + sa.getSentenceHead('VP'))
          # State locality: 'X is in Y'
          elif st == 'greeting':
             self.response("say Hi, how are you") 
