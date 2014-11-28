@@ -55,3 +55,7 @@ class memoryClass():
       return (c in self.concepts)
 
 
+
+
+
+

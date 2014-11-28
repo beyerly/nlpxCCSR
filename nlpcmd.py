@@ -35,13 +35,15 @@ def main(argv):
 if __name__ == "__main__":
    main(sys.argv[1:])
 
-appID = 'xxx'        # Fill in yur own Wolfram AppID here
+appID = 'xxx'        # Fill in your own Wolfram AppID here
 useFifos = False     # Only set True if integrated with CCSR robot platform
 s = ccsrNlpClass(useFifos, appID)
+#debug = False
+debug = True
 
 print 'nplxCCSR v0.1: type a question...'
 while (1):
    line = sys.stdin.readline()
-   s.nlpParse(line, True)
+   s.nlpParse(line, debug)
    if not loop:
       break

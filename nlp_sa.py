@@ -18,10 +18,9 @@ from pattern.en import conjugate, lemma, lexeme
 class sentenceAnalysisClass:
    def __init__(self, s, debug=0):
       self.s = s    # pattern.en sentence class
-      self.concept = ''
-      self.subject = ''
-      self.conceptPhrase = ''
-      self.debug = False
+      self.concept    = ''
+      self.property   = ''
+      self.debug   = False
       
       # Dictionary of chunk sequence reqexps related to a specific sentence type
       self.chunkSequences = [[re.compile(':VP(:ADVP|:PP)'), 'command'],     # e.g. turn 180 degrees
@@ -80,6 +79,8 @@ class sentenceAnalysisClass:
    # Return type of sentence. Types are encoded es strings: e.g. 'statement', 'command', 'questionLocality', etc   
    # e.g. 'the cat is in the garden' = <NP><VP><PP><NP> => "stateLocality"
    def sentenceType (self):
+      self.concept  = 'OBJ'
+      self.property = 'SBJ'
       if (len(self.s.chunks) > 0):
           # We have chunks
           if (self.s.chunks[0].start == 0):
@@ -87,28 +88,20 @@ class sentenceAnalysisClass:
              if (self.s.chunks[0].type == 'VP'):
                 # First chunk is verb-phrase
                 if (self.s.chunks[0].head.lemma in self.wordRef['stateVerbs']):
-                   self.concept = self.getSentenceRole('OBJ')
                    return 'confirmState'              # is X Y?
                 if (self.s.chunks[0].head.lemma in self.wordRef['commandVerbs']):
                    return 'command'                   # can you X Y
                 if (self.s.chunks[0].head.lemma == 'do'):
                    if self.getSentenceRole('OBJ') == 'I':
                       if self.getNthChunk('VP',1).head.lemma == 'know':
-                         self.concept = self.getSentenceRole('SBJ')
-                         self.conceptPhrase = self.getSentencePhrase('SBJ')
-                         print self.concept
-                         print self.conceptPhrase
+                         self.concept = 'SBJ'
                          return self.sentenceType_WH()
              else:
                 # use regexp-based chunk matching to find sentence type
-                self.subject = self.getSentenceRole('SBJ')
-                self.concept = self.getSentenceRole('OBJ')
-                self.conceptPhrase = self.getSentencePhrase('OBJ')
+                self.concept  = 'SBJ'
                 return self.matchChunk()
           else:
              # Sentence starts with an un-chunked word: 'what, where, how, etc'
-             self.concept = self.getSentenceRole('OBJ')
-             self.conceptPhrase = self.getSentencePhrase('OBJ')
              return self.sentenceType_WH()
       else:
           # no chunks: e.g. interjections: hello, wow, etc
@@ -122,8 +115,6 @@ class sentenceAnalysisClass:
        w = self.getFirstWord('WRB')
        if (w != None):
           if (w.string == 'where'):
-             print self.concept
-             print self.conceptPhrase
              return 'questionLocality'          # where is X
           elif (w.string == 'how'):
              return 'questionState'             # how is X
@@ -150,9 +141,9 @@ class sentenceAnalysisClass:
    def getSentenceRole (self, role):
       p = ''
       for chunk in self.s.chunks:
-         if chunk.role == role:
+         if (chunk.role == role) or (chunk.type == role):
             if chunk.head.type == 'NNP-PERS':
-                # Main work is personal name, so collect all other NNP-PERS in the phrase assuming they are part of the name
+                # Main word is personal name, so collect all other NNP-PERS in the phrase assuming they are part of the name
                 for w in chunk.words:
                     if w.type == 'NNP-PERS':
                         p = p + w.string
@@ -189,6 +180,16 @@ class sentenceAnalysisClass:
             elif chunk.type == tag:
                return self.reflectObject(chunk.string)
 
+   # Return first chunk with specified tag or role
+   def getSentenceChunk (self, tag):
+      for chunk in self.s.chunks:
+         if chunk.role == tag:
+            return chunk
+         elif chunk.type == tag:
+            return chunk
+
+
+
    # Get head (most imporant word) of phrase with a specific role or type. This is used to filter out the key
    # 'concept' that CCSR uses to access its memory
    # If a verb, get lemma (root of verb)
@@ -208,13 +209,11 @@ class sentenceAnalysisClass:
       else:
          return obj  
 
-   # called when sentence is a query, ruturns True if query is too complex to CCSR to resolve wih tits own concept memory,
+   # called when sentence is a query, returns True if query is too complex to CCSR to resolve wih tits own concept memory,
    # and nlp should pass on query to cloud
    def complexQuery(self):
-       # Currentl definition of a 'complex' query is
-       #   - more than 2 chunks
-       #   - first NP chunk has more than 2 words
+       # Currently definition of a 'complex' query is
+       #   - concept phrase has more than 2 words
        # e.g. 'where is the cat' => simple
-       # e.g. 'where is the largest cat in the workd' => complex
-       print 's' + self.conceptPhrase
-       return len(self.getFirstChunk('NP').words) > 2 or (len(self.s.chunks)>2)
+       # e.g. 'where is the largest cat in the world' => complex
+       return len (self.getSentenceChunk(self.concept).words)>2

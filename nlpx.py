@@ -19,6 +19,8 @@ import getopt
 import re
 import subprocess
 import xml.etree.ElementTree as ET
+import csv
+import random
 
 from pattern.en import parse
 from pattern.en import pprint
@@ -40,7 +42,7 @@ class ccsrNlpClass:
 
       # Add a concept 'I', defining CCSR identity
       self.ccsrmem.add('I')
-      self.ccsrmem.concepts['I'].state = 'great'      # should reflect CCSR mood by telemetry, static for now
+      self.ccsrmem.concepts['I'].state = 'great'      # dynamically reflect CCSR mood by telemetry
       self.ccsrmem.concepts['I'].person = '1sg'       # 2st person singular
       self.ccsrmem.concepts['I'].isProperNoun = True 
 
@@ -48,13 +50,58 @@ class ccsrNlpClass:
       # as a result of a query.
       self.wolframAlphaPodsUsed = ('Notable facts', 'Result')
 
+      # translate CCSR status dump items to concepts for ccsrmem
+      self.translateStatus =  {"heading": "compass",
+                               "Temperature": "temperature",
+                               "stress": "stress",
+                               "Battery Voltage": "battery"}
+
+      # Synonymes for certain response forms, to give some natural response
+      # variations
+      self.responseVariations =  {"yes": ("yes",
+                                          "affirmative",
+                                          "definitely",
+                                          "sure"),
+                                  "acknowledge": ("I see",
+                                                  "OK",
+                                                  "acknowledged",
+                                                  "if you say so",
+                                                  "copy that",
+                                                  "I'll remember that"),
+                                  "gratitude":   ("Thanks",
+                                                  "I appreciate that",
+                                                  "You are too kind",
+                                                  "Oh stop it"),
+                                  "insulted":    ("I'm sorry you feel that way",
+                                                  "well, you're not too hot either",
+                                                  "look who's talking",
+                                                  "can't we just be nice"),
+                                  "no": ("no",
+                                         "negative",
+                                         "I don't think so",
+                                         "definitely not",
+                                         "no way")
+                                  }
+
+      self.positivePhrases = ['smart',
+                              'impressive',
+                              'cool']
+      self.negativePhrases = ['stupid',
+                              'annoying',
+                              'boring']
+
       if useFifos:
          self.wfifo = open('/home/root/ccsr/nlp_fifo_in', 'w')
          self.rfifo = open('/home/root/ccsr/nlp_fifo_out', 'r')
 
-      self.wolframID = appID
-      self.useFifos = useFifos
-      
+      self.wolframID = appID     # Wolfram API App ID
+      self.useFifos = useFifos   # IF True, we pipe responses to CCSR. False in debg mode
+      self.cmdResponse = ''      # We store CCSR command response here, unused for now
+
+   def randomizedResponseVariation(self, response):
+       idx = random.randint(0, len(self.responseVariations[response])-1)
+       return self.responseVariations[response][idx]
+
    # If nlpx can;t determine the answer to a question based on its own knowledge
    # this function synthesises a wolframAlpha query from the sentence
    # e.g. 'what is the weather today' => 'what+is+the+weather+today'
@@ -113,7 +160,27 @@ class ccsrNlpClass:
       if self.useFifos:
          self.wfifo.write(m)
          self.wfifo.flush()
+         # This should block untill cmd response is received. Used to sync.
+         self.cmdResponse = self.rfifo.readline();  
 
+   # This function updates nlpxCCSR with the current state of the CCSR process
+   # Send cmd to CCSR to dump status in CSV file. Parse this CVS
+   # file and update the 'I' concept in ccsrmem accordinly
+   # This function is run everytime a query is done about 'I' (e.g. how are you)
+   def updateCCSRStatus(self):
+      self.response("dump csv")
+      statusDump = open('ccsrState_dump.csv', 'r')
+      if statusDump == 0:
+         print "Can't open ccsrState_dump.csv"
+      csvfile = csv.reader(statusDump)
+      for item in csvfile:
+         self.ccsrmem.concepts['I'].properties[self.translateStatus[item[0]]] = item[1] + " " + item[2]
+      if int(self.ccsrmem.concepts['I'].properties['stress']) > 0:
+         self.ccsrmem.concepts['I'].state = 'not feeling so great'      
+      else:
+         self.ccsrmem.concepts['I'].state = 'great'      
+
+      
    # Main function: generate a CCSR command as response to input text.
    # Text will be from google speech2text service.
    # 'how are you' => 'say I am great'
@@ -125,14 +192,16 @@ class ccsrNlpClass:
          st = sa.sentenceType()
          if sa.debug:
             print st
+            print 'concept: ' + sa.concept
          # Question state: 'how is X'
          if st == 'questionState':
-            if self.ccsrmem.known(sa.concept):
+            self.updateCCSRStatus()
+            if self.ccsrmem.known(sa.getSentenceRole(sa.concept)):
                # if we know anything about the concept, we rely on CCSR memory
-               if self.ccsrmem.concepts[sa.concept].state == 'none':
-                  self.response("say Sorry, I don't know how " + sa.conceptPhrase + ' ' + conjugate('be', self.ccsrmem.concepts[sa.concept].person))
+               if self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state == 'none':
+                  self.response("say Sorry, I don't know how " + sa.getSentencePhrase(sa.concept) + ' ' + conjugate('be', self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].person))
                else:   
-                  self.response("say " + sa.conceptPhrase + " " + conjugate('be', self.ccsrmem.concepts[sa.concept].person) + " " + self.ccsrmem.concepts[sa.concept].state)
+                  self.response("say " + sa.getSentencePhrase(sa.concept) + " " + conjugate('be', self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].person) + " " + self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state)
             else:
                if sa.complexQuery():
                   # Nothing is knows about the concept, and the query is 'complex', let's ask the cloud
@@ -140,24 +209,25 @@ class ccsrNlpClass:
                   for result in self.wolframAlphaAPI(sa):
                      self.response("say " + result)              
                else:
-                  self.response("say Sorry, I don't know " + sa.conceptPhrase)
+                  self.response("say Sorry, I don't know " + sa.getSentencePhrase(sa.concept))
          # Confirm state: 'is X Y'
          elif st == 'confirmState':
-            if self.ccsrmem.known(sa.concept):
-               if sa.getSentencePhrase('ADJP') == self.ccsrmem.concepts[sa.concept].state:
-                  self.response("say yes") 
+            if self.ccsrmem.known(sa.getSentenceRole(sa.concept)):
+               if sa.getSentencePhrase('ADJP') == self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state:
+                  self.response("say " + self.randomizedResponseVariation('yes')) 
                else:
-                  self.response("say no, " + sa.conceptPhrase('OBJ') + " " + conjugate('be', self.ccsrmem.concepts[sa.concept].person) + " " + self.ccsrmem.concepts[sa.concept].state)
+                  self.response("say " + self.randomizedResponseVariation('no') + " " + sa.getSentencePhrase(sa.concept) + " " + conjugate('be', self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].person) + " " + self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state)
             else:
-               self.response("say Sorry, I don't know " + sa.conceptPhrase)
+               self.response("say Sorry, I don't know " + sa.getSentencePhrase(sa.concept))
          # Question definition: 'what/who is X'
          elif st == 'questionDefinition':
             if sa.is2ndPersonalPronounPosessive('OBJ'): 
+               self.updateCCSRStatus()
                # Question refers back to ccsr: what is 'your' X  
-               if sa.concept in self.ccsrmem.concepts['I'].properties:
-                  self.response("say my " + sa.concept + " is " + self.ccsrmem.concepts['I'].properties[sa.concept])
+               if sa.getSentenceRole(sa.concept) in self.ccsrmem.concepts['I'].properties:
+                  self.response("say my " + sa.getSentenceRole(sa.concept) + " is " + self.ccsrmem.concepts['I'].properties[sa.getSentenceRole(sa.concept)])
                else:
-                  self.response("say I don't know what my " + sa.concept + " is ")
+                  self.response("say I don't know what my " + sa.getSentenceRole(sa.concept) + " is ")
             else:
                # Question about person, object or thing
                if sa.complexQuery():
@@ -165,7 +235,7 @@ class ccsrNlpClass:
                   for result in self.wolframAlphaAPI(sa):
                      self.response("say " + result)              
                else:
-                  wordnetQuery = wordnet.synsets(sa.concept)
+                  wordnetQuery = wordnet.synsets(sa.getSentenceRole(sa.concept))
                   if len(wordnetQuery) > 0:
                      self.response("say " + re.split(";",wordnetQuery[0].gloss)[0])
                   else:
@@ -177,34 +247,45 @@ class ccsrNlpClass:
          elif st == 'statement':
             if sa.is2ndPersonalPronounPosessive('SBJ'): 
                # Refers back to ccsr: 'your' X is Y 
-               if sa.subject not in self.ccsrmem.concepts['I'].properties:
-                  self.ccsrmem.concepts['I'].properties[sa.subject] = sa.conceptPhrase
+               if sa.getSentenceRole(sa.concept) not in self.ccsrmem.concepts['I'].properties:
+                  self.ccsrmem.concepts['I'].properties[sa.getSentenceRole(sa.concept)] = sa.getSentencePhrase('OBJ')
+               self.response("say " + self.randomizedResponseVariation('acknowledge')) 
             else:
-               if not self.ccsrmem.known(sa.subject):
-                  self.ccsrmem.add(sa.subject)  
-               self.ccsrmem.concepts[sa.subject].state = sa.getSentencePhrase('ADJP')
-            self.response("say I see") 
+               if sa.getSentenceRole(sa.concept) == 'I':
+                  # Statement about CCSR, do not memorize this (CCSR maintains its own state based on CCSR telemetry
+                  # but instead react to statement
+                  print 'ww ' + sa.getSentenceRole('ADJP')
+                  if sa.getSentenceRole('ADJP') in self.positivePhrases:
+                     self.response("say " + self.randomizedResponseVariation('gratitude')) 
+                  else:
+                     self.response("say " + self.randomizedResponseVariation('insulted')) 
+               else:
+                  if not self.ccsrmem.known(sa.getSentenceRole(sa.concept)):
+                     self.ccsrmem.add(sa.getSentenceRole(sa.concept))  
+                  self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state = sa.getSentencePhrase('ADJP')
+                  self.response("say " + self.randomizedResponseVariation('acknowledge')) 
          # State locality: 'X is in Y'
          elif st == 'stateLocality':
-            if not self.ccsrmem.known(sa.subject):
-               self.ccsrmem.add(sa.subject)  
-            self.ccsrmem.concepts[sa.subject].locality = sa.getSentencePhrase('PNP')
-            self.response("say I see") 
+            if not self.ccsrmem.known(sa.getSentenceRole(sa.concept)):
+               self.ccsrmem.add(sa.getSentenceRole(sa.concept))  
+            self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].locality = sa.getSentencePhrase('PNP')
+            self.response("say " + self.randomizedResponseVariation('acknowledge')) 
          # Question locality: 'Where is X'
          elif st == 'questionLocality':
-            if self.ccsrmem.known(sa.concept):
-               if self.ccsrmem.concepts[sa.concept].locality == 'none':
-                  self.response("say Sorry, I don't know where " + sa.conceptPhrase('OBJ') + ' ' + conjugate('be', self.ccsrmem.concepts[sa.concept].person))
+            if self.ccsrmem.known(sa.getSentenceRole(sa.concept)):
+               if self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].locality == 'none':
+                  self.response("say Sorry, I don't know where " + sa.getSentencePhrase(sa.concept) + ' ' + conjugate('be', self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].person))
                else:   
-                  self.response("say " + sa.conceptPhrase + " " + conjugate('be', self.ccsrmem.concepts[sa.concept].person) + " " + self.ccsrmem.concepts[sa.concept].locality)
+                  self.response("say " + sa.getSentencePhrase(sa.concept) + " " + conjugate('be', self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].person) + " " + self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].locality)
             else:
-               self.response("say Sorry, I don't know " + sa.conceptPhrase)
+               self.response("say Sorry, I don't know " + sa.getSentencePhrase(sa.concept))
          # Command
          elif st == 'command':
             if self.cap.capable(sa.getSentenceHead('VP')):
                # Command is a prefixed CCSR command to be given through telemetry
-               self.response("say yes I can") 
-               self.response(self.cap.constructCmd(sa))
+               self.response("say " + self.randomizedResponseVariation('yes') + " I can") 
+               for cmd in self.cap.constructCmd(sa):
+                  self.response(cmd)
             elif sa.getSentenceHead('VP') == 'tell':
                # This is a request to tell something about a topic
                if len(sa.s.pnp) > 0:
