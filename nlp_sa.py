@@ -32,7 +32,8 @@ class sentenceAnalysisClass:
       self.wordRef = {
                       'stateVerbs': ('be'),                                                         # verbs that make a statement
                       'commandVerbs':('turn', 'go', 'look', 'track', 'find', 'can', 'pick', 'put'), # verbs that CCSR can interpret as command
-                      'greetings':('hello', 'hi', 'greetings')                                      # words that constitute a greeting
+                      'greetings':('hello', 'hi', 'greetings'),                                      # words that constitute a greeting
+                      'bye':('goodbye', 'adieu')                                      # words that constitute a greeting
                       }
       self.reflex = {'I':'you', 'you':'I', 'yourself':'I'}
       if debug: 
@@ -99,6 +100,10 @@ class sentenceAnalysisClass:
              else:
                 # use regexp-based chunk matching to find sentence type
                 self.concept  = 'SBJ'
+                if self.s.chunks[0].head.lemma == 'thank':
+                   return 'gratitude'
+                if self.s.chunks[0].head.string in self.wordRef['bye']:
+                   return 'bye'
                 return self.matchChunk()
           else:
              # Sentence starts with an un-chunked word: 'what, where, how, etc'
@@ -216,4 +221,4 @@ class sentenceAnalysisClass:
        #   - concept phrase has more than 2 words
        # e.g. 'where is the cat' => simple
        # e.g. 'where is the largest cat in the world' => complex
-       return len (self.getSentenceChunk(self.concept).words)>2
+       return len (self.getSentenceChunk(self.concept).words)>=2

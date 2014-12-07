@@ -19,12 +19,12 @@ class capabilitiesClass:
    def __init__(self):
       # List of verbs that are translated into CCSR robot commands
       self.c = ('turn',
-                'find',
-                'extend',
-                'pick',
-                'put',
+                'give',
                 'look',
-                'analyze')
+                'analyze',
+                'find',
+                'come',
+                'speak')
 
 
    # Return True if verb is in CCSR capabilities list
@@ -35,18 +35,26 @@ class capabilitiesClass:
    # The commands in this list can be passed diretly to the CCSR telementry fifo
    def constructCmd(self, sa):
       if sa.getSentenceHead('VP') == 'turn': 
-          
           return ['turnto ' + sa.getFirstWord('CD').string]
-      elif sa.getSentenceHead('VP') == 'pick':
-          return ['pickup']
-      elif sa.getSentenceHead('VP') == 'put':
-          return ['putdown']
+      elif sa.getSentenceHead('VP') == 'give':
+          return ['giveobj']
       elif sa.getSentenceHead('VP') == 'look':
           return ['orient fwd']
       elif sa.getSentenceHead('VP') == 'analyze':
-          return ['analyseobj']
+          return ['analyzeobj']
       elif sa.getSentenceHead('VP') == 'find':
+          return ['findobj']
+      elif sa.getSentenceHead('VP') == 'come':
           return ['set track 1',  # Enable object tracking
                   'set state 2']  # Change CCSR state from RC to Orientation
+      elif sa.getSentenceHead('VP') == 'speak':
+          if sa.getSentenceRole('ADVP') == 'louder':
+             return ['set volume 20',
+                     'is this better?']
+          elif sa.getSentenceRole('ADVP') == 'quietly':
+             return ['set volume -20',
+                     'is this better?']
+          else:
+             return "Sorry, I don't understand"
       else:
          return "say I don't know that command"

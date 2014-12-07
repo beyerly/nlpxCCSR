@@ -21,6 +21,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 import csv
 import random
+import os
 
 from pattern.en import parse
 from pattern.en import pprint
@@ -32,6 +33,9 @@ from pattern.en import conjugate, lemma, lexeme
 from nlp_sa  import sentenceAnalysisClass
 from nlp_cap import capabilitiesClass
 from nlp_mem import memoryClass
+
+ccsrStateDumpFile      = '../dump/ccsrState_dump.csv'
+ccsrStateDumpFileDebug = 'ccsrState_dump.csv'
 
 # main CCSR NLP Class
 class ccsrNlpClass:
@@ -48,20 +52,23 @@ class ccsrNlpClass:
 
       # This is a list of useful 'pod names' in an XML file returned by Wolfram Alpha API
       # as a result of a query.
-      self.wolframAlphaPodsUsed = ('Notable facts', 'Result')
+      self.wolframAlphaPodsUsed = ('Notable facts', 'Result', 'Definition')
 
       # translate CCSR status dump items to concepts for ccsrmem
-      self.translateStatus =  {"heading": "compass",
-                               "Temperature": "temperature",
-                               "stress": "stress",
-                               "Battery Voltage": "battery"}
+      self.translateStatus =  {"compass": "compass heading",
+                               "temperature": "temperature",
+                               "stress": "stress level",
+                               "battery": "battery level",
+                               "power": "power usage",
+                               "light": "ambient light level"}
 
       # Synonymes for certain response forms, to give some natural response
       # variations
       self.responseVariations =  {"yes": ("yes",
                                           "affirmative",
                                           "definitely",
-                                          "sure"),
+                                          "sure",
+                                          "absolutely"),
                                   "acknowledge": ("I see",
                                                   "OK",
                                                   "acknowledged",
@@ -76,11 +83,19 @@ class ccsrNlpClass:
                                                   "well, you're not too hot either",
                                                   "look who's talking",
                                                   "can't we just be nice"),
+                                  "gratitudeReply": ("you're very welcome",
+                                                     "sure thing",
+                                                     "no worries",
+                                                     "don't mention it"),
+                                  "bye": ("see you later",
+                                          "it was a pleasure",
+                                          "bye bye"),
                                   "no": ("no",
                                          "negative",
                                          "I don't think so",
                                          "definitely not",
-                                         "no way")
+                                         "no way",
+                                         "you wish")
                                   }
 
       self.positivePhrases = ['smart',
@@ -169,17 +184,25 @@ class ccsrNlpClass:
    # This function is run everytime a query is done about 'I' (e.g. how are you)
    def updateCCSRStatus(self):
       self.response("dump csv")
-      statusDump = open('ccsrState_dump.csv', 'r')
-      if statusDump == 0:
-         print "Can't open ccsrState_dump.csv"
+      if os.path.isfile(ccsrStateDumpFile): 
+         statusDump = open(ccsrStateDumpFile, 'r')
+      else:
+         print "Can't open " + ccsrStateDumpFile + ", using static debug file"
+         statusDump = open(ccsrStateDumpFileDebug, 'r')
       csvfile = csv.reader(statusDump)
       for item in csvfile:
-         self.ccsrmem.concepts['I'].properties[self.translateStatus[item[0]]] = item[1] + " " + item[2]
-      if int(self.ccsrmem.concepts['I'].properties['stress']) > 0:
+         self.ccsrmem.concepts['I'].properties[item[0]] = [self.translateStatus[item[0]], item[1] + " " + item[2]] 
+      if int(self.ccsrmem.concepts['I'].properties['stress'][1]) > 0:
          self.ccsrmem.concepts['I'].state = 'not feeling so great'      
       else:
          self.ccsrmem.concepts['I'].state = 'great'      
 
+   def getPersonalProperty(self, sa):
+      # Question refers back to ccsr: how is 'your' X  
+      if sa.getSentenceRole(sa.concept) in self.ccsrmem.concepts['I'].properties:
+         self.response("say my " + self.ccsrmem.concepts['I'].properties[sa.getSentenceRole(sa.concept)][0] + " is " + self.ccsrmem.concepts['I'].properties[sa.getSentenceRole(sa.concept)][1])
+      else:
+         self.response("say I don't know how my " + sa.getSentenceRole(sa.concept) + " is ")
       
    # Main function: generate a CCSR command as response to input text.
    # Text will be from google speech2text service.
@@ -196,7 +219,10 @@ class ccsrNlpClass:
          # Question state: 'how is X'
          if st == 'questionState':
             self.updateCCSRStatus()
-            if self.ccsrmem.known(sa.getSentenceRole(sa.concept)):
+            if sa.is2ndPersonalPronounPosessive('OBJ'):
+               # Question refers back to ccsr: how is 'your' X. Look up CCSR's personal property
+               self.getPersonalProperty(sa)
+            elif self.ccsrmem.known(sa.getSentenceRole(sa.concept)):
                # if we know anything about the concept, we rely on CCSR memory
                if self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state == 'none':
                   self.response("say Sorry, I don't know how " + sa.getSentencePhrase(sa.concept) + ' ' + conjugate('be', self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].person))
@@ -222,12 +248,9 @@ class ccsrNlpClass:
          # Question definition: 'what/who is X'
          elif st == 'questionDefinition':
             if sa.is2ndPersonalPronounPosessive('OBJ'): 
+               # Question refers back to ccsr: what is 'your' X. Look up CCSR's personal property
                self.updateCCSRStatus()
-               # Question refers back to ccsr: what is 'your' X  
-               if sa.getSentenceRole(sa.concept) in self.ccsrmem.concepts['I'].properties:
-                  self.response("say my " + sa.getSentenceRole(sa.concept) + " is " + self.ccsrmem.concepts['I'].properties[sa.getSentenceRole(sa.concept)])
-               else:
-                  self.response("say I don't know what my " + sa.getSentenceRole(sa.concept) + " is ")
+               self.getPersonalProperty(sa)
             else:
                # Question about person, object or thing
                if sa.complexQuery():
@@ -248,7 +271,7 @@ class ccsrNlpClass:
             if sa.is2ndPersonalPronounPosessive('SBJ'): 
                # Refers back to ccsr: 'your' X is Y 
                if sa.getSentenceRole(sa.concept) not in self.ccsrmem.concepts['I'].properties:
-                  self.ccsrmem.concepts['I'].properties[sa.getSentenceRole(sa.concept)] = sa.getSentencePhrase('OBJ')
+                  self.ccsrmem.concepts['I'].properties[sa.getSentenceRole(sa.concept)] = [sa.getSentenceRole(sa.concept), sa.getSentencePhrase('OBJ')]
                self.response("say " + self.randomizedResponseVariation('acknowledge')) 
             else:
                if sa.getSentenceRole(sa.concept) == 'I':
@@ -294,7 +317,7 @@ class ccsrNlpClass:
                   if self.ccsrmem.known(concept):
                      if  len(self.ccsrmem.concepts[concept].properties) > 0:
                         for p in self.ccsrmem.concepts[concept].properties:
-                           self.response("say " + self.ccsrmem.posessivePronouns[self.ccsrmem.concepts[concept].person] + " " + p + " is " + self.ccsrmem.concepts[concept].properties[p])            
+                           self.response("say " + self.ccsrmem.posessivePronouns[self.ccsrmem.concepts[concept].person] + " " + self.ccsrmem.concepts[concept].properties[p][0] + " is " + self.ccsrmem.concepts[concept].properties[p][1])            
                      else:
                         self.response("say sorry, I can't tell you much about " + sa.reflectObject(sa.s.pnp[0].head.string))
                   else:
@@ -305,5 +328,9 @@ class ccsrNlpClass:
          # State locality: 'X is in Y'
          elif st == 'greeting':
             self.response("say Hi, how are you") 
+         elif st == 'bye':
+            self.response("say " + self.randomizedResponseVariation('bye')) 
+         elif st == 'gratitude':
+            self.response("say " + self.randomizedResponseVariation('gratitudeReply')) 
          else:
             self.response("say sorry, I don't understand")
