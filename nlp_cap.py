@@ -50,10 +50,10 @@ class capabilitiesClass:
       elif sa.getSentenceHead('VP') == 'speak':
           if sa.getSentenceRole('ADVP') == 'louder':
              return ['set volume 20',
-                     'is this better?']
+                     'say is this better?']
           elif sa.getSentenceRole('ADVP') == 'quietly':
              return ['set volume -20',
-                     'is this better?']
+                     'say is this better?']
           else:
              return "Sorry, I don't understand"
       else:

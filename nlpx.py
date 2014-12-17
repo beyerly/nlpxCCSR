@@ -34,7 +34,7 @@ from nlp_sa  import sentenceAnalysisClass
 from nlp_cap import capabilitiesClass
 from nlp_mem import memoryClass
 
-ccsrStateDumpFile      = '../dump/ccsrState_dump.csv'
+ccsrStateDumpFile      = '../data/ccsrState_dump.csv'
 ccsrStateDumpFileDebug = 'ccsrState_dump.csv'
 
 # main CCSR NLP Class
