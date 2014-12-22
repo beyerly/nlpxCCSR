@@ -163,7 +163,8 @@ class ccsrNlpClass:
                text = subpod.find('plaintext').text
                textlist = re.split('\n', text)
                # return list of strings representign answer to query
-               return textlist
+               print textlist
+	       return textlist
       else:
          print 'Error: curl command failed, only runs on linux. Query not successful'
          return ('none')
