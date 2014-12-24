@@ -25,7 +25,8 @@ class sentenceAnalysisClass:
       # Dictionary of chunk sequence reqexps related to a specific sentence type
       self.chunkSequences = [[re.compile(':VP(:ADVP|:PP)'), 'command'],     # e.g. turn 180 degrees
                              [re.compile(':NP:VP:(ADJP|NP)'), 'statement'], # X is Y
-                             [re.compile(':NP:VP:PP:NP'), 'stateLocality']  # X is in Y
+                             [re.compile(':NP:VP:PP:NP'), 'stateLocality'],  # X is in Y
+                             [re.compile('(:NP)*:ADJP'), 'adverbPhrase']     # a little further, a lot less   
                             ]
 
       # Dictionary containing groups of words (nouns, verbs, etc) with which CCSR can associate an idea or action  
@@ -106,8 +107,12 @@ class sentenceAnalysisClass:
                    return 'bye'
                 return self.matchChunk()
           else:
-             # Sentence starts with an un-chunked word: 'what, where, how, etc'
-             return self.sentenceType_WH()
+             if (self.s.words[0].type == 'DT'):
+                # Sentence starts with determiner: 'a little more, the big dog'
+                return self.matchChunk()
+             else:
+                # Sentence starts with an un-chunked word: 'what, where, how, etc'
+                return self.sentenceType_WH()
       else:
           # no chunks: e.g. interjections: hello, wow, etc
           w = self.getFirstWord('UH')
@@ -218,7 +223,8 @@ class sentenceAnalysisClass:
    # and nlp should pass on query to cloud
    def complexQuery(self):
        # Currently definition of a 'complex' query is
-       #   - concept phrase has more than 2 words
+       #   - concept phrase has more than 2 words (excluding a determiner)
        # e.g. 'where is the cat' => simple
        # e.g. 'where is the largest cat in the world' => complex
-       return len (self.getSentenceChunk(self.concept).words)>=2
+       print self.concept
+       return (len(self.getSentenceChunk(self.concept).words) > 2) or (self.getSentenceChunk(self.concept).words[0].type != 'DT')

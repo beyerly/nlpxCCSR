@@ -75,7 +75,7 @@ class ccsrNlpClass:
                                                   "if you say so",
                                                   "copy that",
                                                   "I'll remember that"),
-                                  "gratitude":   ("Thanks",
+                                  "gratitude":   ("Thanks!",
                                                   "I appreciate that",
                                                   "You are too kind",
                                                   "Oh stop it"),
@@ -83,10 +83,10 @@ class ccsrNlpClass:
                                                   "well, you're not too hot either",
                                                   "look who's talking",
                                                   "can't we just be nice"),
-                                  "gratitudeReply": ("you're very welcome",
-                                                     "sure thing",
-                                                     "no worries",
-                                                     "don't mention it"),
+                                  "gratitudeReply": ("you're very welcome!",
+                                                     "sure thing!",
+                                                     "no worries!",
+                                                     "don't mention it!"),
                                   "bye": ("see you later",
                                           "it was a pleasure",
                                           "bye bye"),
@@ -134,10 +134,11 @@ class ccsrNlpClass:
    #  ('xxx tower', '3000ft')
    def wolframAlphaAPI(self, sa):
       # Call wolfram API as subprocess, 
-      call = 'curl "http://api.wolframalpha.com/v2/query?input=' + self.createWolframAlphaQuery(sa) + '&appid=' + self.wolframID + '&format=plaintext" -o query.xml'
-      p = subprocess.Popen(call, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-      retval = p.wait()
-      if retval == 0:
+#      call = 'curl "http://api.wolframalpha.com/v2/query?input=' + self.createWolframAlphaQuery(sa) + '&appid=' + self.wolframID + '&format=plaintext" -o query.xml'
+#      p = subprocess.Popen(call, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+#      retval = p.wait()
+#      if retval == 0:
+      if 1:
          # parse query XML file returned by wolfram alpha
          tree = ET.parse('./query.xml')
          root = tree.getroot()
@@ -150,20 +151,29 @@ class ccsrNlpClass:
                   plaintext = subpod.find('plaintext')
                   if plaintext != None:
                      text = subpod.find('plaintext').text
+                     text = re.sub('noun ', '', text)
+                     # Filter out funny characters
+                     text = re.sub('[^A-Z0-9a-z \\n]', '', text)
                      textlist = re.split('\n', text)
                      # return list of strings representign answer to query
                      return textlist
          # We havent found a known pod, just pick the second pod, a wild
-         # guess that is the most useful
+         # guess that is the most useful. Pod title should reflect contents
          pod = root.findall('pod')[1]
          for subpod in pod.findall('subpod'):
             # retrieve plaintext answers
             plaintext = subpod.find('plaintext')
             if plaintext != None:
+               # Replace a set of known symbols with words
                text = subpod.find('plaintext').text
+               text = re.sub(' .F', ' degrees', text)
+               text = re.sub('\%', ' percent', text)
+               text = re.sub(' mph', ' miles per hour', text)
+               # Filter out funny characters
+               text = re.sub('[^A-Z0-9a-z \\n]', '', text)
                textlist = re.split('\n', text)
+               textlist.insert(0,pod.get('title'))
                # return list of strings representign answer to query
-               print textlist
 	       return textlist
       else:
          print 'Error: curl command failed, only runs on linux. Query not successful'
@@ -333,5 +343,10 @@ class ccsrNlpClass:
             self.response("say " + self.randomizedResponseVariation('bye')) 
          elif st == 'gratitude':
             self.response("say " + self.randomizedResponseVariation('gratitudeReply')) 
+         elif st == 'adverbPhrase':
+            if sa.getSentenceHead('ADJP') == 'further':
+               for cmd in self.cap.lastCmd:
+                  self.response(cmd)
          else:
             self.response("say sorry, I don't understand")
+         self.cap.lastCmd = self.cap.constructCmd(sa)

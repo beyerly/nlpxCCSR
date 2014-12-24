@@ -6,6 +6,7 @@
 
 import sys
 import re
+import time
 
 from pattern.en import parse
 from pattern.en import pprint
@@ -18,13 +19,15 @@ from pattern.en import conjugate, lemma, lexeme
 class capabilitiesClass:
    def __init__(self):
       # List of verbs that are translated into CCSR robot commands
+      self.lastCmd = ()
       self.c = ('turn',
                 'give',
                 'look',
                 'analyze',
                 'find',
                 'come',
-                'speak')
+                'speak',
+                'move')
 
 
    # Return True if verb is in CCSR capabilities list
@@ -35,7 +38,13 @@ class capabilitiesClass:
    # The commands in this list can be passed diretly to the CCSR telementry fifo
    def constructCmd(self, sa):
       if sa.getSentenceHead('VP') == 'turn': 
-          return ['turnto ' + sa.getFirstWord('CD').string]
+          if sa.getFirstWord('CD') != None:
+             return ['turnto ' + sa.getFirstWord('CD').string]
+          elif sa.getSentenceChunk('ADJP')  != None:
+             if sa.getSentenceChunk('ADJP').string == 'right':
+                return ['turn 0 1000']
+             elif sa.getSentenceChunk('ADJP').string == 'left':
+                return ['turn 1 1000']
       elif sa.getSentenceHead('VP') == 'give':
           return ['giveobj']
       elif sa.getSentenceHead('VP') == 'look':
@@ -47,6 +56,14 @@ class capabilitiesClass:
       elif sa.getSentenceHead('VP') == 'come':
           return ['set track 1',  # Enable object tracking
                   'set state 2']  # Change CCSR state from RC to Orientation
+      elif sa.getSentenceHead('VP') == 'move':
+          if sa.getSentenceChunk('ADVP')  != None:
+             if sa.getSentenceChunk('ADVP').string == 'forward':
+                return ['move 1 1000']
+             elif sa.getSentenceChunk('ADVP').string == 'back':
+                return ['move 2 1000']
+             else:
+                return "Sorry, I don't understand"
       elif sa.getSentenceHead('VP') == 'speak':
           if sa.getSentenceRole('ADVP') == 'louder':
              return ['set volume 20',
