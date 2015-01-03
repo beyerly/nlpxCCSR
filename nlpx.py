@@ -22,6 +22,7 @@ import xml.etree.ElementTree as ET
 import csv
 import random
 import os
+import requests
 
 from pattern.en import parse
 from pattern.en import pprint
@@ -128,20 +129,29 @@ class ccsrNlpClass:
             query = query + '+'
       return query
 
+   def annaApi(self, text):
+      apiString = re.sub(' ', '%20', text)
+      url = 'http://droids.homeip.net/RoboticsWeb/SimpleAPI.aspx?API.Key=29c7e1f3-23cf-496a-abd6-34e92e8d670f&Session.Key=New&Robot.Key=59459&Speech.Input=' + apiString
+      r = requests.get(url)
+      if r:
+         # parse query XML file returned by ANNA
+         root = ET.fromstring(r.content)
+         resp = root.findall('Response.Speech')
+         if resp:
+            self.response(resp.text)
+         else:
+            self.response('Sorry, could not get response from Anna')
+
    # Call WolframAlpha API and return list of strings containing most relevant
    # answers to a query contained in sa.
    # e.g. 'what is the tallest building in the world' =>
    #  ('xxx tower', '3000ft')
    def wolframAlphaAPI(self, sa):
-      # Call wolfram API as subprocess, 
-#      call = 'curl "http://api.wolframalpha.com/v2/query?input=' + self.createWolframAlphaQuery(sa) + '&appid=' + self.wolframID + '&format=plaintext" -o query.xml'
-#      p = subprocess.Popen(call, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-#      retval = p.wait()
-#      if retval == 0:
-      if 1:
+      url = 'http://api.wolframalpha.com/v2/query?input=' + self.createWolframAlphaQuery(sa) + '&appid=' + self.wolframID + '&format=plaintext'
+      r = requests.get(url)
+      if r:
          # parse query XML file returned by wolfram alpha
-         tree = ET.parse('./query.xml')
-         root = tree.getroot()
+         root = ET.fromstring(r.content)
          for pod in root.findall('pod'):
             title = pod.get('title')
             if title in self.wolframAlphaPodsUsed:
@@ -159,22 +169,28 @@ class ccsrNlpClass:
                      return textlist
          # We havent found a known pod, just pick the second pod, a wild
          # guess that is the most useful. Pod title should reflect contents
-         pod = root.findall('pod')[1]
-         for subpod in pod.findall('subpod'):
-            # retrieve plaintext answers
-            plaintext = subpod.find('plaintext')
-            if plaintext != None:
-               # Replace a set of known symbols with words
-               text = subpod.find('plaintext').text
-               text = re.sub(' .F', ' degrees', text)
-               text = re.sub('\%', ' percent', text)
-               text = re.sub(' mph', ' miles per hour', text)
-               # Filter out funny characters
-               text = re.sub('[^A-Z0-9a-z \\n]', '', text)
-               textlist = re.split('\n', text)
-               textlist.insert(0,pod.get('title'))
-               # return list of strings representign answer to query
-	       return textlist
+         pod = root.findall('pod')
+         if len(pod) > 0:
+            pod = pod[1]
+            for subpod in pod.findall('subpod'):
+               # retrieve plaintext answers
+               plaintext = subpod.find('plaintext')
+               if plaintext != None:
+                  # Replace a set of known symbols with words
+                  text = subpod.find('plaintext').text
+                  text = re.sub(' .F', ' degrees', text)
+                  text = re.sub('\%', ' percent', text)
+                  text = re.sub(' mph', ' miles per hour', text)
+                  # Filter out funny characters
+                  text = re.sub('[^A-Z0-9a-z \\n]', '', text)
+                  textlist = re.split('\n', text)
+                  textlist.insert(0,pod.get('title'))
+                  # return list of strings representign answer to query
+                  return textlist
+         else:
+            # no pods
+            textlist = ['Sorry, I could not find anything']
+            return textlist
       else:
          print 'Error: curl command failed, only runs on linux. Query not successful'
          return ('none')
