@@ -148,6 +148,7 @@ class ccsrNlpClass:
    #  ('xxx tower', '3000ft')
    def wolframAlphaAPI(self, sa):
       url = 'http://api.wolframalpha.com/v2/query?input=' + self.createWolframAlphaQuery(sa) + '&appid=' + self.wolframID + '&format=plaintext'
+      print url
       r = requests.get(url)
       if r:
          # parse query XML file returned by wolfram alpha
@@ -163,7 +164,8 @@ class ccsrNlpClass:
                      text = subpod.find('plaintext').text
                      text = re.sub('noun ', '', text)
                      # Filter out funny characters
-                     text = re.sub('[^A-Z0-9a-z \\n]', '', text)
+                     text = re.sub('[^A-Z0-9a-z \\n;]', '', text)
+                     text = re.sub(';', '.', text)
                      textlist = re.split('\n', text)
                      # return list of strings representign answer to query
                      return textlist
@@ -306,8 +308,10 @@ class ccsrNlpClass:
                   # but instead react to statement
                   print 'ww ' + sa.getSentenceRole('ADJP')
                   if sa.getSentenceRole('ADJP') in self.positivePhrases:
+                     self.response("set mood 50 50 ") 
                      self.response("say " + self.randomizedResponseVariation('gratitude')) 
                   else:
+                     self.response("set mood -50 50 ") 
                      self.response("say " + self.randomizedResponseVariation('insulted')) 
                else:
                   if not self.ccsrmem.known(sa.getSentenceRole(sa.concept)):

@@ -39,7 +39,7 @@ for opt, arg in opts:
    elif opt in ("-d"):
       debug = True
 
-appID = 'xxx'        # Fill in your own Wolfram AppID here
+appID = 'T3H9JX-RQQ2273TJ9'        # Fill in your own Wolfram AppID here
 useFifos = False     # Only set True if integrated with CCSR robot platform
 s = ccsrNlpClass(useFifos, appID)
 
