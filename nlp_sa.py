@@ -33,7 +33,7 @@ class sentenceAnalysisClass:
       self.wordRef = {
                       'stateVerbs': ('be'),                                                         # verbs that make a statement
                       'commandVerbs':('turn', 'go', 'look', 'track', 'find', 'can', 'pick', 'put'), # verbs that CCSR can interpret as command
-                      'greetings':('hello', 'hi', 'greetings'),                                      # words that constitute a greeting
+                      'greetings':('hello', 'hi', 'greetings', 'hey'),                                      # words that constitute a greeting
                       'bye':('goodbye', 'adieu')                                      # words that constitute a greeting
                       }
       self.reflex = {'I':'you', 'you':'I', 'yourself':'I'}
@@ -110,6 +110,10 @@ class sentenceAnalysisClass:
              if (self.s.words[0].type == 'DT'):
                 # Sentence starts with determiner: 'a little more, the big dog'
                 return self.matchChunk()
+             elif (self.s.words[0].type == 'UH'):
+                # Sentence starts with determiner: 'a little more, the big dog'
+                if self.s.words[0].string in self.wordRef['greetings']:
+                   return 'greeting'
              else:
                 # Sentence starts with an un-chunked word: 'what, where, how, etc'
                 return self.sentenceType_WH()

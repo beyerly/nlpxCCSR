@@ -58,45 +58,49 @@ class ccsrNlpClass:
       # translate CCSR status dump items to concepts for ccsrmem
       self.translateStatus =  {"compass": "compass heading",
                                "temperature": "temperature",
-                               "stress": "stress level",
+                               "happiness": "happiness",
+                               "arousal": "arousal",
                                "battery": "battery level",
                                "power": "power usage",
                                "light": "ambient light level"}
 
       # Synonymes for certain response forms, to give some natural response
       # variations
-      self.responseVariations =  {"yes": ("yes",
-                                          "affirmative",
-                                          "definitely",
-                                          "sure",
-                                          "absolutely"),
-                                  "acknowledge": ("I see",
-                                                  "OK",
-                                                  "acknowledged",
-                                                  "if you say so",
-                                                  "copy that",
-                                                  "I'll remember that"),
+      self.responseVariations =  {"yes": ("Yes.",
+                                          "Affirmative.",
+                                          "Definitely.",
+                                          "Sure.",
+                                          "Absolutely."),
+                                  "acknowledge": ("I see.",
+                                                  "OK.",
+                                                  "Acknowledged.",
+                                                  "If you say so.",
+                                                  "Copy that.",
+                                                  "I'll remember that."),
                                   "gratitude":   ("Thanks!",
-                                                  "I appreciate that",
-                                                  "You are too kind",
-                                                  "Oh stop it"),
-                                  "insulted":    ("I'm sorry you feel that way",
-                                                  "well, you're not too hot either",
-                                                  "look who's talking",
-                                                  "can't we just be nice"),
-                                  "gratitudeReply": ("you're very welcome!",
-                                                     "sure thing!",
-                                                     "no worries!",
-                                                     "don't mention it!"),
-                                  "bye": ("see you later",
-                                          "it was a pleasure",
-                                          "bye bye"),
-                                  "no": ("no",
-                                         "negative",
-                                         "I don't think so",
-                                         "definitely not",
-                                         "no way",
-                                         "you wish")
+                                                  "I appreciate that.",
+                                                  "You are too kind.",
+                                                  "Oh stop it."),
+                                  "insulted":    ("I'm sorry you feel that way.",
+                                                  "Well, you're not too hot either.",
+                                                  "Look who's talking.",
+                                                  "Can't we just be nice."),
+                                  "gratitudeReply": ("You're very welcome!",
+                                                     "Sure thing!",
+                                                     "No worries!",
+                                                     "Don't mention it!"),
+                                  "bye": ("See you later.",
+                                          "It was a pleasure.",
+                                          "Bye bye."),
+                                  "hi": ("Hi, how are you.",
+                                          "Hey there.",
+                                          "What's going on!"),
+                                  "no": ("No.",
+                                         "Negative.",
+                                         "I don't think so.",
+                                         "Definitely not.",
+                                         "No way.",
+                                         "You wish.")
                                   }
 
       self.positivePhrases = ['smart',
@@ -105,6 +109,26 @@ class ccsrNlpClass:
       self.negativePhrases = ['stupid',
                               'annoying',
                               'boring']
+
+
+      self.emotionMap = [['angry.',
+                          'aggrevated',
+                          'very excited',
+                          'very happy'],
+                         ['frustrated',
+                          'stressed',
+                          'excited',
+                          'happy.'],
+                         ['sad',
+                          'doing OK',
+                          'doing well',
+                          'doing very well.'],
+                         ['depressed',
+                          'sleepy',
+                          'bored',
+                          'relaxed']]
+                         
+
 
       if useFifos:
          self.wfifo = open('/home/root/ccsr/nlp_fifo_in', 'w')
@@ -165,7 +189,7 @@ class ccsrNlpClass:
                      text = re.sub('noun ', '', text)
                      # Filter out funny characters
                      text = re.sub('[^A-Z0-9a-z \\n;]', '', text)
-                     text = re.sub(';', '.', text)
+                     text = re.sub('; (.)', lambda pat: '. ' + pat.group(1).upper(), text)
                      textlist = re.split('\n', text)
                      # return list of strings representign answer to query
                      return textlist
@@ -220,18 +244,22 @@ class ccsrNlpClass:
          statusDump = open(ccsrStateDumpFileDebug, 'r')
       csvfile = csv.reader(statusDump)
       for item in csvfile:
+         # Item in cvs file is list of 2 or 3 items: 'name', 'value' and optinally a 'unit' (e.g. power 100 milliwatt)
          self.ccsrmem.concepts['I'].properties[item[0]] = [self.translateStatus[item[0]], item[1] + " " + item[2]] 
-      if int(self.ccsrmem.concepts['I'].properties['stress'][1]) > 0:
-         self.ccsrmem.concepts['I'].state = 'not feeling so great'      
-      else:
-         self.ccsrmem.concepts['I'].state = 'great'      
+      yEmotionMap = 3-(4*(int(self.ccsrmem.concepts['I'].properties['arousal'][1]))/255)
+      xEmotionMap = 4*(int(self.ccsrmem.concepts['I'].properties['happiness'][1]) + 255)/511
+      self.ccsrmem.concepts['I'].state = self.emotionMap[yEmotionMap][xEmotionMap]
+#      if int(self.ccsrmem.concepts['I'].properties['happiness'][1]) > 0:
+#         self.ccsrmem.concepts['I'].state = 'not feeling so great'      
+#      else:
+#         self.ccsrmem.concepts['I'].state = 'great'      
 
    def getPersonalProperty(self, sa):
       # Question refers back to ccsr: how is 'your' X  
       if sa.getSentenceRole(sa.concept) in self.ccsrmem.concepts['I'].properties:
          self.response("say my " + self.ccsrmem.concepts['I'].properties[sa.getSentenceRole(sa.concept)][0] + " is " + self.ccsrmem.concepts['I'].properties[sa.getSentenceRole(sa.concept)][1])
       else:
-         self.response("say I don't know how my " + sa.getSentenceRole(sa.concept) + " is ")
+         self.response("say I don't know what my " + sa.getSentenceRole(sa.concept) + " is ")
       
    # Main function: generate a CCSR command as response to input text.
    # Text will be from google speech2text service.
@@ -268,10 +296,16 @@ class ccsrNlpClass:
          # Confirm state: 'is X Y'
          elif st == 'confirmState':
             if self.ccsrmem.known(sa.getSentenceRole(sa.concept)):
+               if(sa.getSentenceRole(sa.concept) == 'I'):
+                  self.updateCCSRStatus()
                if sa.getSentencePhrase('ADJP') == self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state:
-                  self.response("say " + self.randomizedResponseVariation('yes')) 
+                  self.response("say " + self.randomizedResponseVariation('yes'))
+                  self.response("facial 14") # Nod Yes 
                else:
-                  self.response("say " + self.randomizedResponseVariation('no') + " " + sa.getSentencePhrase(sa.concept) + " " + conjugate('be', self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].person) + " " + self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state)
+                  self.response("say " + self.randomizedResponseVariation('no'))
+                  self.response("facial 15") # Shake no 
+                  self.response("say " + sa.getSentencePhrase(sa.concept) + " " + conjugate('be', self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].person) + " " + self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state)
+                  print self.ccsrmem.concepts['I'].state
             else:
                self.response("say Sorry, I don't know " + sa.getSentencePhrase(sa.concept))
          # Question definition: 'what/who is X'
@@ -358,7 +392,7 @@ class ccsrNlpClass:
                self.response("say I'm afraid I can't do that. I don't know how to " + sa.getSentenceHead('VP'))
          # State locality: 'X is in Y'
          elif st == 'greeting':
-            self.response("say Hi, how are you") 
+            self.response("say " + self.randomizedResponseVariation('hi')) 
          elif st == 'bye':
             self.response("say " + self.randomizedResponseVariation('bye')) 
          elif st == 'gratitude':
