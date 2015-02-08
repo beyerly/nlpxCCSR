@@ -299,11 +299,11 @@ class ccsrNlpClass:
                if(sa.getSentenceRole(sa.concept) == 'I'):
                   self.updateCCSRStatus()
                if sa.getSentencePhrase('ADJP') == self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state:
-                  self.response("say " + self.randomizedResponseVariation('yes'))
                   self.response("facial 14") # Nod Yes 
+                  self.response("say " + self.randomizedResponseVariation('yes'))
                else:
-                  self.response("say " + self.randomizedResponseVariation('no'))
                   self.response("facial 15") # Shake no 
+                  self.response("say " + self.randomizedResponseVariation('no'))
                   self.response("say " + sa.getSentencePhrase(sa.concept) + " " + conjugate('be', self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].person) + " " + self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state)
                   print self.ccsrmem.concepts['I'].state
             else:
@@ -342,10 +342,10 @@ class ccsrNlpClass:
                   # but instead react to statement
                   print 'ww ' + sa.getSentenceRole('ADJP')
                   if sa.getSentenceRole('ADJP') in self.positivePhrases:
-                     self.response("set mood 50 50 ") 
+                     self.response("set mood 500 500 ") 
                      self.response("say " + self.randomizedResponseVariation('gratitude')) 
                   else:
-                     self.response("set mood -50 50 ") 
+                     self.response("set mood -300 50 ") 
                      self.response("say " + self.randomizedResponseVariation('insulted')) 
                else:
                   if not self.ccsrmem.known(sa.getSentenceRole(sa.concept)):
@@ -404,3 +404,4 @@ class ccsrNlpClass:
          else:
             self.response("say sorry, I don't understand")
          self.cap.lastCmd = self.cap.constructCmd(sa)
+      self.response("listen")
