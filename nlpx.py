@@ -38,6 +38,24 @@ from nlp_mem import memoryClass
 ccsrStateDumpFile      = '../data/ccsrState_dump.csv'
 ccsrStateDumpFileDebug = 'ccsrState_dump.csv'
 
+EXPR_BLINK              = 0
+EXPR_TALK               = 1
+EXPR_LOOKSTRAIGHT       = 2
+EXPR_LOOKLEFT           = 3
+EXPR_LOOKRIGHT          = 4
+EXPR_LOOKUP             = 5
+EXPR_LOOKDOWN           = 6
+EXPR_SLEEP              = 7
+EXPR_HAPPY              = 8
+EXPR_WAKE               = 9
+EXPR_ANGRY              = 10
+EXPR_SCARED             = 11
+EXPR_CROSSEYED          = 12
+EXPR_SCANNER            = 13 
+EXPR_NODYES             = 14
+EXPR_SHAKENO            = 15
+EXPR_WHITELIGHT         = 16
+
 # main CCSR NLP Class
 class ccsrNlpClass:
 
@@ -100,7 +118,7 @@ class ccsrNlpClass:
                                          "I don't think so.",
                                          "Definitely not.",
                                          "No way.",
-                                         "You wish.")
+                                         "Not really.")
                                   }
 
       self.positivePhrases = ['smart',
@@ -188,7 +206,7 @@ class ccsrNlpClass:
                      text = subpod.find('plaintext').text
                      text = re.sub('noun ', '', text)
                      # Filter out funny characters
-                     text = re.sub('[^A-Z0-9a-z \\n;]', '', text)
+                     text = re.sub('[^A-Z0-9a-z .\\n;]', '', text)
                      text = re.sub('; (.)', lambda pat: '. ' + pat.group(1).upper(), text)
                      textlist = re.split('\n', text)
                      # return list of strings representign answer to query
@@ -289,6 +307,8 @@ class ccsrNlpClass:
                if sa.complexQuery():
                   # Nothing is knows about the concept, and the query is 'complex', let's ask the cloud
                   self.response("say let me look that up for you")
+                  # Looking up stuff makes CCSR happy and excited 
+                  self.response("mood 50 50")
                   for result in self.wolframAlphaAPI(sa):
                      self.response("say " + result)              
                else:
@@ -299,10 +319,10 @@ class ccsrNlpClass:
                if(sa.getSentenceRole(sa.concept) == 'I'):
                   self.updateCCSRStatus()
                if sa.getSentencePhrase('ADJP') == self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state:
-                  self.response("facial 14") # Nod Yes 
+                  self.response("facial " + str(EXPR_NODYES)) # Nod Yes 
                   self.response("say " + self.randomizedResponseVariation('yes'))
                else:
-                  self.response("facial 15") # Shake no 
+                  self.response("facial " + str(EXPR_SHAKENO)) # Shake no 
                   self.response("say " + self.randomizedResponseVariation('no'))
                   self.response("say " + sa.getSentencePhrase(sa.concept) + " " + conjugate('be', self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].person) + " " + self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].state)
                   print self.ccsrmem.concepts['I'].state
@@ -342,9 +362,11 @@ class ccsrNlpClass:
                   # but instead react to statement
                   print 'ww ' + sa.getSentenceRole('ADJP')
                   if sa.getSentenceRole('ADJP') in self.positivePhrases:
+                     # Saying something nice will maximize happiness and arousal
                      self.response("set mood 500 500 ") 
                      self.response("say " + self.randomizedResponseVariation('gratitude')) 
                   else:
+                     # Saying something insulting will minimize happiness and increase arousal
                      self.response("set mood -300 50 ") 
                      self.response("say " + self.randomizedResponseVariation('insulted')) 
                else:
@@ -362,15 +384,22 @@ class ccsrNlpClass:
          elif st == 'questionLocality':
             if self.ccsrmem.known(sa.getSentenceRole(sa.concept)):
                if self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].locality == 'none':
+                  # Not knowing stuff makes CCSR sad and a little aroused 
+                  self.response("mood -50 20")
                   self.response("say Sorry, I don't know where " + sa.getSentencePhrase(sa.concept) + ' ' + conjugate('be', self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].person))
                else:   
+                  # Knowing stuff makes CCSR happy and a little aroused 
+                  self.response("mood 50 20")
                   self.response("say " + sa.getSentencePhrase(sa.concept) + " " + conjugate('be', self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].person) + " " + self.ccsrmem.concepts[sa.getSentenceRole(sa.concept)].locality)
             else:
+               # Not knowing stuff makes CCSR sad and a little aroused 
+               self.response("mood -50 20")
                self.response("say Sorry, I don't know " + sa.getSentencePhrase(sa.concept))
          # Command
          elif st == 'command':
             if self.cap.capable(sa.getSentenceHead('VP')):
                # Command is a prefixed CCSR command to be given through telemetry
+               self.response("facial " + str(EXPR_NODYES)) # Nod Yes 
                self.response("say " + self.randomizedResponseVariation('yes') + " I can") 
                for cmd in self.cap.constructCmd(sa):
                   self.response(cmd)
@@ -389,12 +418,19 @@ class ccsrNlpClass:
                      self.response("say let me look that up for you")
                      self.response("say " + self.wolframAlphaAPI(sa))              
             else:
+               # Not knowing stuff makes CCSR sad and a little aroused 
+               self.response("mood -50 20")
+               self.response("facial " + str(EXPR_SHAKENO)) 
+               self.response("say " + self.randomizedResponseVariation('no')) 
                self.response("say I'm afraid I can't do that. I don't know how to " + sa.getSentenceHead('VP'))
          # State locality: 'X is in Y'
          elif st == 'greeting':
             self.response("say " + self.randomizedResponseVariation('hi')) 
          elif st == 'bye':
-            self.response("say " + self.randomizedResponseVariation('bye')) 
+            self.response("say " + self.randomizedResponseVariation('bye'))
+            # Turn away and start autonomously exploring
+            self.response("turn 1 100000")
+            self.response("set state 7")
          elif st == 'gratitude':
             self.response("say " + self.randomizedResponseVariation('gratitudeReply')) 
          elif st == 'adverbPhrase':
