@@ -211,11 +211,14 @@ class sentenceAnalysisClass:
    def getSentenceHead (self, tag):
       for chunk in self.s.chunks:
          if chunk.role == tag:
-            return self.reflectObject(chunk.head.lemma)
+            if self.reflectObject(chunk.head.lemma) != None:
+	       return self.reflectObject(chunk.head.lemma)
          elif chunk.type == tag:
             if chunk.head.type != 'MD':      # Filter out modal Auxilaries (can/could/etc)
-               return self.reflectObject(chunk.head.lemma)
-
+               if self.reflectObject(chunk.head.lemma) != None:
+                  return self.reflectObject(chunk.head.lemma)
+      return " "
+      
    # Reflect words if applicable: you<->I, my<->your, etc
    def reflectObject(self, obj):
       if obj in self.reflex:

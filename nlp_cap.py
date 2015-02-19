@@ -44,9 +44,9 @@ class capabilitiesClass:
              return ['turnto ' + sa.getFirstWord('CD').string]
           elif sa.getSentenceChunk('ADJP')  != None:
              if sa.getSentenceChunk('ADJP').string == 'right':
-                return ['turn 0 100000']
+                return ['turn 0 1000000']
              elif sa.getSentenceChunk('ADJP').string == 'left':
-                return ['turn 1 100000']
+                return ['turn 1 1000000']
       elif sa.getSentenceHead('VP') == 'give':
           return ['obj give']
       elif sa.getSentenceHead('VP') == 'look':
@@ -56,7 +56,7 @@ class capabilitiesClass:
       elif sa.getSentenceHead('VP') == 'find':
           return ['obj find']
       elif sa.getSentenceHead('VP') == 'grab':
-          return ['obj grab']
+          return ['obj pickup']
       elif sa.getSentenceHead('VP') == 'drop':
           return ['obj drop']
       elif sa.getSentenceHead('VP') == 'come':
@@ -65,9 +65,9 @@ class capabilitiesClass:
       elif sa.getSentenceHead('VP') == 'move':
           if sa.getSentenceChunk('ADVP')  != None:
              if sa.getSentenceChunk('ADVP').string == 'forward':
-                return ['move 1 1000']
+                return ['move 1 1000000']
              elif sa.getSentenceChunk('ADVP').string == 'back':
-                return ['move 2 1000']
+                return ['move 2 1000000']
              else:
                 return "Sorry, I don't understand"
       elif sa.getSentenceHead('VP') == 'speak':
