@@ -18,11 +18,13 @@ import sys
 import getopt
 import re
 import subprocess
-import xml.etree.ElementTree as ET
 import csv
 import random
 import os
 import requests
+
+
+sys.path.insert(0, '../robotics_web')
 
 from pattern.en import parse
 from pattern.en import pprint
@@ -34,6 +36,7 @@ from pattern.en import conjugate, lemma, lexeme
 from nlp_sa  import sentenceAnalysisClass
 from nlp_cap import capabilitiesClass
 from nlp_mem import memoryClass
+from robotics_web import roboticsWebClass
 
 ccsrStateDumpFile      = '../data/ccsrState_dump.csv'
 ccsrStateDumpFileDebug = 'ccsrState_dump.csv'
@@ -59,10 +62,12 @@ EXPR_WHITELIGHT         = 16
 # main CCSR NLP Class
 class ccsrNlpClass:
 
-   def __init__(self, useFifos, appID):
+   def __init__(self, useFifos, appID, robotKey, debug):
       self.cap       = capabilitiesClass()   # CCSR capabilities
       self.ccsrmem   = memoryClass()         # memory of concepts
-
+      self.roboticsWeb =  roboticsWebClass(robotKey, debug)
+      self.debug = debug
+      
       # Add a concept 'I', defining CCSR identity
       self.ccsrmem.add('I')
       self.ccsrmem.concepts['I'].state = 'great'      # dynamically reflect CCSR mood by telemetry
@@ -156,6 +161,10 @@ class ccsrNlpClass:
       self.useFifos = useFifos   # IF True, we pipe responses to CCSR. False in debg mode
       self.cmdResponse = ''      # We store CCSR command response here, unused for now
 
+   def remoteBrain(self, text):
+      for el in self.roboticsWeb.brainAPI(text):
+         self.response(el)
+
    def randomizedResponseVariation(self, response):
        idx = random.randint(0, len(self.responseVariations[response])-1)
        return self.responseVariations[response][idx]
@@ -171,18 +180,6 @@ class ccsrNlpClass:
             query = query + '+'
       return query
 
-   def annaApi(self, text):
-      apiString = re.sub(' ', '%20', text)
-      url = 'http://droids.homeip.net/RoboticsWeb/SimpleAPI.aspx?API.Key=29c7e1f3-23cf-496a-abd6-34e92e8d670f&Session.Key=New&Robot.Key=59459&Speech.Input=' + apiString
-      r = requests.get(url)
-      if r:
-         # parse query XML file returned by ANNA
-         root = ET.fromstring(r.content)
-         resp = root.findall('Response.Speech')
-         if resp:
-            self.response(resp.text)
-         else:
-            self.response('Sorry, could not get response from Anna')
 
    # Call WolframAlpha API and return list of strings containing most relevant
    # answers to a query contained in sa.
@@ -283,10 +280,10 @@ class ccsrNlpClass:
    # Text will be from google speech2text service.
    # 'how are you' => 'say I am great'
    # 'can you look left => 'say sure', 'set pantilt 180 0 20'
-   def nlpParse(self, line, debug=0):
+   def nlpParse(self, line):
       text = parsetree(line, relations=True, lemmata=True)
       for sentence in text:
-         sa = sentenceAnalysisClass(sentence, debug)
+         sa = sentenceAnalysisClass(sentence, self.debug)
          st = sa.sentenceType()
          if sa.debug:
             print st
