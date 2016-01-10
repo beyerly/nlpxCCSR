@@ -18,12 +18,12 @@ from pattern.en import conjugate, lemma, lexeme
 from nlpx import ccsrNlpClass
 
 loop = True         # If true, we continuously read and parse
-#brain = 'nlpxCCSR'  # By default, use nlpxCCSR python module as NLP brain. We can
+brain = 'nlpxCCSR'  # By default, use nlpxCCSR python module as NLP brain. We can
                     # set this to 'ANNA' to use the remote brain API at
                     # http://droids.homeip.net/RoboticsWeb/
-debug = True
-#debug = False
-brain = 'ANNA'
+#debug = True
+debug = False
+#brain = 'ANNA'
 #mode = 'poll'
 mode = 'audioCapture'
 
